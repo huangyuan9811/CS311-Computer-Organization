@@ -1,0 +1,123 @@
+length of data section 0
+length of text section 512
+.data
+
+.text
+
+main:
+
+addu
+$2,
+$4,
+$5
+
+this is line is 00000000100001010001000000100001
+instr length is 32
+addu
+$2,
+$6,
+$7
+
+this is line is 00000000110001110001000000100001
+instr length is 32
+subu
+$9,
+$3,
+$2
+
+this is line is 00000000011000100100100000100011
+instr length is 32
+lab1:
+
+and
+$11,
+$11,
+$0
+
+this is line is 00000001011000000101100000100100
+instr length is 32
+addiu
+$10,
+$10,
+0x1
+
+this is line is 00100101010010100000000000000001
+instr length is 32
+or
+$6,
+$6,
+$0
+
+this is line is 00000000110000000011000000100101
+instr length is 32
+jal
+lab3
+
+this is line is 00001100000100000000000000000111
+instr length is 32
+lab3:
+
+sll
+$7,
+$6,
+2
+
+this is line is 00000000000001100011100010000000
+instr length is 32
+srl
+$5,
+$4,
+2
+
+this is line is 00000000000001000010100010000010
+instr length is 32
+sltiu
+$9,
+$10,
+100
+
+this is line is 00101101010010010000000001100100
+instr length is 32
+beq
+$9,
+$0,
+lab4
+
+this is line is 00010001001000000000000000000001
+instr length is 32
+jr
+$31
+
+this is line is 00000011111000000000000000000100
+instr length is 32
+lab4:
+
+sltu
+$4,
+$2,
+$3
+
+this is line is 00000000010000110010000000101011
+instr length is 32
+bne
+$4,
+$0,
+lab5
+
+this is line is 00010100100000000000000000000001
+instr length is 32
+j
+lab1
+
+this is line is 00001000000100000000000000000011
+instr length is 32
+lab5:
+
+ori
+$16,
+$16,
+0xf0f0
+
+this is line is 00110110000100001111000011110000
+instr length is 32
+num var 0
