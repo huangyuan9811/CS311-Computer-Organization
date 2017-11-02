@@ -1,8 +1,14 @@
 # CS311 Computer Organization midterm prep
 
 * What is ISA and microarchitecture
-* Why we learn computer organization?
+  * ISA is a layer between user program and kernel
+  * ISA is implemented with microarchitecture on a specific processor
+
+* Computer architecture = ISA + microarchitecutre
+
 * 이 수업이 왜 중요한가...
+  * moore's law (used to) show the number of transistors double every 2 years, meaning that therate of improvement and the impact it has is significant in modern day computing
+  * 컴퓨터를 빨리, 그리고 유저에게 더 알맞게 돌아가게하자.
 
 ## What did I learn so far 
 * basic logic
@@ -14,7 +20,7 @@
 * logic gates 
 * MUX
   * mux 정말 중요함. 나중에 control path할때도 많이 쓰임.
-  * mux selects particular input
+  * mux selects particular input, control signal does this
 
 * combinational logic vs sequential logic
   * combinational : the output depends on current input only
@@ -58,6 +64,13 @@
 ### Performance 
 * CPU execution time = cycle time * instruction count * CPI
 
+* instruction count depends on
+  * algorithm, programming language, compiler, ISA
+* CPI depends on 
+  * algorithm(possibly), programming language, compiler, ISA
+* cycle time depends on
+  * ISA, technology
+
 * Performance 왜 중요한가
   * performance는 항상 improve하는게 목적이다
   * 굳이 performance가 time related 일 필요없다. enery efficiency도 있음.
@@ -80,7 +93,10 @@
 
 
 ### Data path and control
-* control signals
+* Implementation of the processor (microarchitecture) determines cycle time and CPI!!
+
+* Why does MIPS compute PC+4?
+  * to support pipeline. pipeline에서 instruction fetch를 하는데 매 cycle마다 instruction을 가져와야하기때문에 pc를 바로 increase한다. (simulator구현할때 미리해야겠구나 하하)
 
 
 ### Pipeline
@@ -95,8 +111,6 @@
 * single cycle의 CPI는 1
 * pipeline의 CPI도 ideally 1
   * 하지만 ideal하지 않을 경우가 많다. 왜?
-
-
 
 
 * data flipflop , latch 한번 더 공부
