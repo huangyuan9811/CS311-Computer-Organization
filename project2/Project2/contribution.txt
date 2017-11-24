@@ -1,0 +1,16 @@
+Chang Hyun Park (3):
+      Initial Commit
+      Adding README.md
+      Merge branch 'master' of ssh://cabackup.kaist.ac.kr:19022/CS311-computer-organization/Project2-handout
+
+Taekyung Heo (3):
+      sample output fixed
+      sample output fixed
+      sample output fixed
+
+kyungyunlee (4):
+      implemented parse instruction and data
+      structure for process_instruction
+      To solve : jal & checking invalid memory access (?)
+      Finished Project2
+
