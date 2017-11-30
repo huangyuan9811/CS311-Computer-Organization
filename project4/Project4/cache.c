@@ -4,8 +4,8 @@
 /* cache.c : Implement your functions declared in cache.h */
 
 void shift_queue (int queue[], int recent_index);
-void update_cache_block(uint32_t * updating_block, uint32_t tagbit, uint32_t data);
 
+void update_cache_block_helper(uint32_t * updating_block, uint32_t tagbit, bool is_store_word);
 /***************************************************************/
 /*                                                             */
 /* Procedure: setupCache                  		       */
@@ -40,6 +40,16 @@ void setupCache(int capacity, int num_way, int block_size)
 		}
 	}
 
+	Cache_helper = (uint32_t ***) malloc(nset*sizeof(uint32_t **));
+	for (i=0; i<nset; i++){
+		Cache_helper[i] = (uint32_t **)malloc(num_way *sizeof(uint32_t*));
+	}
+	for (i=0; i<nset; i++){
+		for (j=0;j<num_way;j++){
+			Cache_helper[i][j] = (uint32_t *) malloc(sizeof(uint32_t));
+		}
+	}
+
 }
 
 
@@ -66,10 +76,12 @@ void setCacheMissPenalty(int penalty_cycles)
  * 32 - 3 - 2 == 27 ==> 28 bits for tag ? TAG_BIT
  */
 
-uint32_t is_data_in_cache(uint32_t address){
+uint32_t is_data_in_cache(uint32_t address, bool is_store_word, uint32_t new_data){
 	int indexbit = (int)INDEX_BIT(address);
+	printf("index bit is %d\n", indexbit);
 	uint32_t tagbit = TAG_BIT(address);
 	uint32_t* cached_block;
+	uint32_t* cached_block_helper;
 	bool valid = 0;
 	bool is_tag_matching = 0;
 	bool cache_hit = 0;
@@ -81,9 +93,12 @@ uint32_t is_data_in_cache(uint32_t address){
 	for (i = 0; i < 4; i++) {
 		// Cache[indexbit][i] is 8 bytes of data == 1 block 
 		cached_block = Cache[indexbit][i];
-		valid = (bool)VALID_BIT(CACHE_BLOCK_FIRST_4(cached_block));
-		is_tag_matching = ~(tagbit ^ (CACHE_BLOCK_TAG_BIT(CACHE_BLOCK_FIRST_4(cached_block))));
-		if (valid & is_tag_matching) {
+		cached_block_helper = Cache_helper[indexbit][i];
+		valid = (bool)VALID_BIT(cached_block_helper[0]);
+		printf("valid bit is %d\n", valid);
+		is_tag_matching = !(tagbit ^ (CACHE_BLOCK_TAG_BIT(cached_block_helper[0])));
+		printf("tag matching %d\n", is_tag_matching);
+		if (valid && is_tag_matching) {
 	 		cache_hit = 1;
 			cache_hit_spot = i;
 			break;
@@ -92,32 +107,44 @@ uint32_t is_data_in_cache(uint32_t address){
 	
 	// if cache hit, return the data right away
 	if (cache_hit) {
-		cached_data = CACHE_BLOCK_LAST_4(cached_block);
-	    // shift queue since accessed	
-		if (indexbit == 0)
-			shift_queue(set_0_queue, cache_hit_spot);
-		else if(indexbit == 1)
-			shift_queue(set_1_queue, cache_hit_spot);
-		return cached_data;
+		if (!is_store_word) { // lw
+			cached_data = cached_block[0];
+			// shift queue since accessed	
+			if (indexbit == 0)
+				shift_queue(set_0_queue, cache_hit_spot);
+			else if(indexbit == 1)
+				shift_queue(set_1_queue, cache_hit_spot);
+			return cached_data;
+		} else { //sw
+			// need to update the cache
+			// set the dirty bit & update data 0x4 
+			cached_block_helper[0] = (cached_block_helper[0] | 0x40000000);
+			cached_block[0] = new_data;
+			return 1;
+		}
+
 	}
 	return 0; // what if the data is 0...omg whatever....
 }
 
-uint32_t load_data_into_cache(uint32_t address){
+uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new_data){
 	int indexbit = (int) INDEX_BIT(address);
 	uint32_t tagbit = TAG_BIT(address);
 	uint32_t *cached_block;
+	uint32_t *cached_block_helper;
 	uint32_t read_data;
 	bool valid = 0;
 	int free_spot = -1;
 	uint32_t *victim_block;
+	uint32_t *victim_block_helper;
 	bool dirtybit = 0;
 
 	// check if there is a free spot
 	int i;
 	for (i =0;i < 4;i++){
 		cached_block = Cache[indexbit][i];
-		valid = (bool) VALID_BIT(CACHE_BLOCK_FIRST_4(cached_block));
+		cached_block_helper = Cache_helper[indexbit][i];
+		valid = (bool) VALID_BIT(cached_block_helper[0]);
 		if (valid == 0) {
 			free_spot = i;
 			break;
@@ -126,8 +153,19 @@ uint32_t load_data_into_cache(uint32_t address){
 	
 	// free spot found! load data into the cache
 	if (free_spot > -1) {
-		read_data = mem_read_32(address);
-		update_cache_block(cached_block, tagbit, read_data);
+		if (!is_store_word) { // lw
+		/*
+			read_data = mem_read_32(address);
+			update_cache_block(cached_block, tagbit, read_data, 0);
+			*/
+			mem_read_block(address, cached_block);
+			update_cache_block_helper(cached_block_helper, tagbit, 0);
+		} 
+		else { // sw
+			//update_cache_block(cached_block, tagbit, new_data ,1);
+			cached_block[0] = new_data;
+			update_cache_block_helper(cached_block_helper, tagbit, 1);
+		}
 		// since it has been accessed, shift queue 
 		if (indexbit == 0)
 			shift_queue(set_0_queue, free_spot);
@@ -135,30 +173,46 @@ uint32_t load_data_into_cache(uint32_t address){
 			shift_queue(set_1_queue, free_spot);
 	}
 	else { // select a victim since there is no free spot 
+		printf("No free slot, need to evict!\n");
 		int victim_num;
 		if (indexbit == 0) {
 			victim_num = set_0_queue[0];
 			victim_block = Cache[indexbit][victim_num];
-			dirtybit = (bool) DIRTY_BIT(CACHE_BLOCK_FIRST_4(victim_block));
+			victim_block_helper = Cache_helper[indexbit][victim_num];
+			dirtybit = (bool) DIRTY_BIT(victim_block_helper);
 			if (dirtybit) {
 				// write back
-				mem_write_32(address, CACHE_BLOCK_LAST_4(victim_block));				
+				mem_write_block(address, victim_block);
 			}
 			// load new data block
-			read_data = mem_read_32(address);
-			update_cache_block(victim_block, tagbit, read_data);
+			if (!is_store_word) {
+				//read_data = mem_read_32(address);
+				mem_read_block(address, victim_block);
+				update_cache_block_helper(victim_block_helper, tagbit,0);
+			} else {
+				mem_read_block(address, victim_block);
+				victim_block[0] = new_data;
+				update_cache_block_helper(victim_block, tagbit,1);
+			}
 			shift_queue(set_0_queue, victim_num);
 		} else {
 			victim_num = set_1_queue[0];
 			victim_block = Cache[indexbit][victim_num];
-			dirtybit = (bool) DIRTY_BIT(CACHE_BLOCK_FIRST_4(victim_block));
+			victim_block_helper = Cache_helper[indexbit][victim_num];
+			dirtybit = (bool) DIRTY_BIT(victim_block_helper);
 			if (dirtybit) {
 				// write back
-				mem_write_32(address, CACHE_BLOCK_LAST_4(victim_block));				
+				mem_write_block(address, victim_block);
 			}
 			// load new data block
-			read_data = mem_read_32(address);
-			update_cache_block(victim_block, tagbit, read_data);
+			if (!is_store_word) {
+				mem_read_block(address, victim_block);
+				update_cache_block_helper(victim_block_helper, tagbit,0);
+			} else {
+				mem_read_block(address, victim_block);
+				victim_block[0] = new_data;
+				update_cache_block_helper(victim_block, tagbit,1);
+			}
 			shift_queue(set_1_queue, victim_num);
 		}
 	}
@@ -186,7 +240,24 @@ void shift_queue (int queue[], int recent_index) {
 }
 
 /* update the cache block when eviction happens */
-void update_cache_block(uint32_t * updating_block, uint32_t tagbit, uint32_t data){
-	updating_block[0] = tagbit | 0x80000000;
+/*
+void update_cache_block(uint32_t * updating_block, uint32_t tagbit, uint32_t data, bool is_store_word){
+	if (!is_store_word) {
+		updating_block[0] = tagbit | 0x80000000;
+	} else {
+		updating_block[0] = tagbit | 0xc0000000;
+	}
 	updating_block[1] = data;
 }
+*/
+
+void update_cache_block_helper(uint32_t * updating_block, uint32_t tagbit, bool is_store_word) {
+	if (!is_store_word) {
+		updating_block[0] = tagbit | 0x80000000;
+	} else {
+		updating_block[0] = tagbit | 0xc0000000;
+	}
+	printf("updated cache block helper %x\n", updating_block[0]);
+}
+
+

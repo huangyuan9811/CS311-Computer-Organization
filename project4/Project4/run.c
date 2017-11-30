@@ -19,6 +19,7 @@ void parse_control_signals(instruction * instr);
 bool alu_out_zero = 0;
 int ID_EX_num_stall = 0; // for hazard detection. load followed by alu instructions
 int IF_ID_num_stall = 0; // for jump instructions and branching
+int EX_MEM_num_stall = 0;
 int jump_IF_ID_num_stall = 0;
 /* Next_PC = set it to the PC of the next instruction to fetch
    In process_instruction(), set CURRENT_STATE.PC = Next_PC;
@@ -36,6 +37,7 @@ bool branchPredictionFailed = 0;
 void flush_IF_ID();
 void flush_ID_EX();
 void flush_EX_MEM();
+void flush_MEM_WB();
 
 int fill_pipeline = 0;
 
@@ -44,6 +46,8 @@ bool finished = 0;
 bool next_finished = 0;
 bool fix_PC = 0; // To set PC value when instructions are all finished
 bool hazard_detected = 0;
+
+int cache_miss_stall = 0;
 
 /***************************************************************/
 /*                                                             */
@@ -76,9 +80,17 @@ instruction* get_inst_info(uint32_t pc) {
 /*                                                             */
 /***************************************************************/
 void process_instruction(){
+	
+	if (cache_miss_stall > 0) {
+		flush_MEM_WB();
+		CURRENT_STATE.PIPE[WB_STAGE] = 0;
+		cache_miss_stall--;
+		return;
+	}
+
 	cycle_count ++;
 	/** Your implementation here */
-
+	
 	/* take care of all the flushing and branching */
 	// update current pc. to find out which instruction to fetch in this cycle.
 	// 3 different types : jump address, branch address, PC+4
@@ -98,6 +110,7 @@ void process_instruction(){
 	} else {
 		CURRENT_STATE.PC = Next_PC + 4;
 	}
+
 
 	/* Handle IF/ID stalls for jump instruction */
 	if (jump_IF_ID_num_stall > 0) {
@@ -401,15 +414,19 @@ void MEM_Stage() {
 		/*
 		cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = mem_read_32(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT);
 		*/
-
+		printf("data memory access\n");
 		/* with data cache */
 		uint32_t cached_data;
-		if (cached_data = is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT)) {
+		if (cached_data = is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0)) {
+			printf("cache read hit\n");
 			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = cached_data;
 		} 
 		else {
+			printf("cache read miss\n");
 			// stall the pipeline
-			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT);
+			cache_miss_stall = 30;
+			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0);
+			flush_MEM_WB();
 		}
 
 
@@ -418,7 +435,30 @@ void MEM_Stage() {
 	}
 	if (cs->past_EX_MEM_pipeline.MEM_CONTROL.MEM_WRITE){
 		// sw instruction
+		/* without data cache */
+		/*
 		mem_write_32(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, cs->past_EX_MEM_pipeline.EX_MEM_ALU_IN_2); // check page 280 and 313
+		*/
+
+		/* with data cache */
+		uint32_t new_data = cs->past_EX_MEM_pipeline.EX_MEM_ALU_IN_2;
+		// if the data corresponding to the address is in the cache
+		// just update the cache block's data && set dirty bit
+		if (is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data)) {
+		// nothing	
+			printf("cache write hit\n");
+		}
+
+		// else 
+		// load the data into the cache and update it with this data
+		else {
+			printf("cache write miss\n");
+			// stall the pipeline
+			cache_miss_stall = 30;
+			load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data);
+			flush_MEM_WB();
+		}
+
 	}
 
 }
@@ -743,6 +783,28 @@ void flush_EX_MEM() {
 	/* EX_MEM_WB_CONTROL */
 	cs->past_EX_MEM_pipeline.WB_CONTROL.REG_WRITE = 0;
 	cs->past_EX_MEM_pipeline.WB_CONTROL.MEM_TO_REG = 0;
+
+}
+
+void flush_MEM_WB() {
+	CPU_State * cs = &CURRENT_STATE;
+	cs->new_MEM_WB_pipeline.MEM_WB_NPC = 0;
+	cs->new_MEM_WB_pipeline.MEM_WB_ALU_OUT = 0;
+	cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = 0;
+	cs->new_MEM_WB_pipeline.MEM_WB_BR_TAKE = 0;
+	cs->new_MEM_WB_pipeline.MEM_WB_DEST = 0;
+	cs->new_MEM_WB_pipeline.MEM_WB_RD = 0;
+	cs->new_MEM_WB_pipeline.WB_CONTROL.REG_WRITE = 0;
+	cs->new_MEM_WB_pipeline.WB_CONTROL.MEM_TO_REG = 0;
+
+	cs->past_MEM_WB_pipeline.MEM_WB_NPC = 0;
+	cs->past_MEM_WB_pipeline.MEM_WB_ALU_OUT = 0;
+	cs->past_MEM_WB_pipeline.MEM_WB_MEM_OUT = 0;
+	cs->past_MEM_WB_pipeline.MEM_WB_BR_TAKE = 0;
+	cs->past_MEM_WB_pipeline.MEM_WB_DEST = 0;
+	cs->past_MEM_WB_pipeline.MEM_WB_RD = 0;
+	cs->past_MEM_WB_pipeline.WB_CONTROL.REG_WRITE = 0;
+	cs->past_MEM_WB_pipeline.WB_CONTROL.MEM_TO_REG = 0;
 
 }
 
