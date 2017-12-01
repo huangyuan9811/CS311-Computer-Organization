@@ -6,12 +6,13 @@
 
 /* cache.h : Declare functions and data necessary for your project*/
 
-#define TAG_BIT(ADDR) (((uintptr_t) ADDR) >> 3)
+#define TAG_BIT(ADDR) (((uintptr_t) ADDR) >> 4)
 #define INDEX_BIT(ADDR) ((((uintptr_t)ADDR) >> 3) & 0x1)
+#define WORD_BIT(ADDR) (((uintptr_t)ADDR & 0x7) >>2)
 
 #define VALID_BIT(ADDR) (((uintptr_t) ADDR) >> 31)
 #define DIRTY_BIT(ADDR) ((((uintptr_t) ADDR) <<1) >> 31)
-#define CACHE_BLOCK_TAG_BIT(ADDR) ((((uintptr_t) ADDR) << 2) >> 2)
+#define CACHE_BLOCK_TAG_BIT(VAL) ((((uint32_t) VAL) << 2) >> 2)
 
 int miss_penalty; // number of cycles to stall when a cache miss occurs
 uint32_t ***Cache; // data cache storing data [set][way][byte]

@@ -81,14 +81,14 @@ instruction* get_inst_info(uint32_t pc) {
 /***************************************************************/
 void process_instruction(){
 	
+	cycle_count ++;
+
 	if (cache_miss_stall > 0) {
-		flush_MEM_WB();
+		//flush_MEM_WB();
 		CURRENT_STATE.PIPE[WB_STAGE] = 0;
 		cache_miss_stall--;
 		return;
 	}
-
-	cycle_count ++;
 	/** Your implementation here */
 	
 	/* take care of all the flushing and branching */
@@ -130,6 +130,7 @@ void process_instruction(){
 	ID_Stage();
 	EX_Stage();
 	MEM_Stage();
+	
 
 	if (ID_EX_num_stall > 0) {
 		flush_ID_EX();
@@ -143,6 +144,7 @@ void process_instruction(){
 		flush_IF_ID();
 		
 	} 
+
 
 	/* if data hazard occurs, don't update the registers */
 	if (ID_EX_num_stall == 0) {
@@ -160,6 +162,7 @@ void process_instruction(){
 		CURRENT_STATE.PC -= 4;
 		hazard_detected = 0;
 	}
+
 
 	/* If all pipeline is empty, exit(0) */
 	if (cycle_count >1) {
@@ -340,6 +343,9 @@ void EX_Stage() {
 			alu_out = ALU_IN_1 & ALU_IN_2;
 		} else if (control == 2) { // ADD
 			alu_out = ALU_IN_1 + ALU_IN_2;
+			printf("alu in 1 %d\n", ALU_IN_1);
+			printf("alu in 2 %d\n", ALU_IN_2);
+			printf("alu out %d\n", alu_out);
 		} else if (control == 1) { // OR
 			alu_out = ALU_IN_1 | ALU_IN_2;
 		} else if (control == 6) { // SUB
@@ -417,16 +423,18 @@ void MEM_Stage() {
 		printf("data memory access\n");
 		/* with data cache */
 		uint32_t cached_data;
-		if (cached_data = is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0)) {
+		if ((cached_data = is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0)) != 0xffffffff) {
 			printf("cache read hit\n");
 			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = cached_data;
+			printf("get it to the register %x\n", cached_data);
 		} 
 		else {
 			printf("cache read miss\n");
 			// stall the pipeline
 			cache_miss_stall = 30;
 			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0);
-			flush_MEM_WB();
+			printf("get it to the register %x\n", load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0,0));
+			//flush_MEM_WB();
 		}
 
 
@@ -444,7 +452,7 @@ void MEM_Stage() {
 		uint32_t new_data = cs->past_EX_MEM_pipeline.EX_MEM_ALU_IN_2;
 		// if the data corresponding to the address is in the cache
 		// just update the cache block's data && set dirty bit
-		if (is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data)) {
+		if (is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data) != 0xffffffff) {
 		// nothing	
 			printf("cache write hit\n");
 		}
@@ -456,7 +464,7 @@ void MEM_Stage() {
 			// stall the pipeline
 			cache_miss_stall = 30;
 			load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data);
-			flush_MEM_WB();
+			//flush_MEM_WB();
 		}
 
 	}
@@ -522,6 +530,7 @@ void parse_control_signals(instruction * instr) {
 				break;
 			case 0x21 : // addu
 				cs->new_ID_EX_pipeline.EX_CONTROL.ALU_CONTROL = 2;
+				printf("addu?\n");
 				break;
 			case 0x27 : // nor
 				cs->new_ID_EX_pipeline.EX_CONTROL.ALU_CONTROL = 12;
