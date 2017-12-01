@@ -39,7 +39,8 @@ void setupCache(int capacity, int num_way, int block_size)
 			Cache[i][j]=(uint32_t*)malloc(sizeof(uint32_t)*(_wpb));
 		}
 	}
-
+	
+	/* initialize the Cache_helper as well */
 	Cache_helper = (uint32_t ***) malloc(nset*sizeof(uint32_t **));
 	for (i=0; i<nset; i++){
 		Cache_helper[i] = (uint32_t **)malloc(num_way *sizeof(uint32_t*));
@@ -49,7 +50,8 @@ void setupCache(int capacity, int num_way, int block_size)
 			Cache_helper[i][j] = (uint32_t *) malloc(sizeof(uint32_t));
 		}
 	}
-
+	
+	/* initialize the queue to 0-1-2-3 */
 	for (i=0;i<4;i++){
 		set_0_queue[i] = i;
 		set_1_queue[i] = i;
@@ -194,6 +196,7 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 	else { // select a victim since there is no free spot 
 		printf("No free slot, need to evict!\n");
 		int victim_num;
+		/* Depending on the index bit, operate on set 0 or set 1 */
 		if (indexbit == 0) {
 			victim_num = set_0_queue[0];
 			printf("victim block is in set 0 , %d\n", victim_num);
@@ -216,7 +219,7 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 					victim_block[0] = new_data;
 				else if (wordbit ==1)
 					victim_block[1] = new_data;
-				update_cache_block_helper(victim_block, tagbit,1);
+				update_cache_block_helper(victim_block_helper, tagbit,1);
 			}
 			shift_queue(set_0_queue, victim_num);
 		} else {
@@ -242,7 +245,7 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 					victim_block[0] = new_data;
 				else if (wordbit ==1)
 					victim_block[1] = new_data;
-				update_cache_block_helper(victim_block, tagbit,1);
+				update_cache_block_helper(victim_block_helper, tagbit,1);
 			}
 			shift_queue(set_1_queue, victim_num);
 		}

@@ -420,7 +420,7 @@ void MEM_Stage() {
 		/*
 		cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = mem_read_32(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT);
 		*/
-		printf("data memory access\n");
+		printf("data memory access : LW\n");
 		/* with data cache */
 		uint32_t cached_data;
 		if ((cached_data = is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0)) != 0xffffffff) {
@@ -433,7 +433,6 @@ void MEM_Stage() {
 			// stall the pipeline
 			cache_miss_stall = 30;
 			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0);
-			printf("get it to the register %x\n", load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0,0));
 			//flush_MEM_WB();
 		}
 
@@ -442,6 +441,7 @@ void MEM_Stage() {
 		cs->new_MEM_WB_pipeline.MEM_WB_ALU_OUT = cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT; // for r-type instruction, this will be written back to destination register in WB stage
 	}
 	if (cs->past_EX_MEM_pipeline.MEM_CONTROL.MEM_WRITE){
+		printf("data memory access : SW\n");
 		// sw instruction
 		/* without data cache */
 		/*
