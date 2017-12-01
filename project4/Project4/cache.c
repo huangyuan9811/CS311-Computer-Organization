@@ -16,8 +16,7 @@ void update_cache_block_helper(uint32_t * updating_block, uint32_t tagbit, bool 
 
 void setupCache(int capacity, int num_way, int block_size)
 {
-/*	code for initializing and setting up your cache	*/
-/*	You may add additional code if you need to	*/
+  /*	code for initializing and setting up your cache	*/
 	/*
 	capacity = 64 bytes
 	num_way = 4
@@ -84,7 +83,6 @@ void setCacheMissPenalty(int penalty_cycles)
 
 uint32_t is_data_in_cache(uint32_t address, bool is_store_word, uint32_t new_data){
 	int indexbit = (int)INDEX_BIT(address);
-	printf("index bit is %d\n", indexbit);
 	uint32_t tagbit = TAG_BIT(address);
 	uint32_t wordbit = WORD_BIT(address);
 	uint32_t* cached_block;
@@ -104,7 +102,6 @@ uint32_t is_data_in_cache(uint32_t address, bool is_store_word, uint32_t new_dat
 		valid = (bool)VALID_BIT(cached_block_helper[0]);
 		is_tag_matching = !(tagbit ^ (CACHE_BLOCK_TAG_BIT(cached_block_helper[0])));
 		if (valid && is_tag_matching) {
-			printf("HIT!\n");
 	 		cache_hit = 1;
 			cache_hit_spot = i;
 			break;
@@ -113,7 +110,6 @@ uint32_t is_data_in_cache(uint32_t address, bool is_store_word, uint32_t new_dat
 	
 	// if cache hit, return the data right away
 	if (cache_hit) {
-		printf("cache hit spot %d\n", cache_hit_spot);
 		if (!is_store_word) { // lw
 			if (wordbit == 0)
 				cached_data = cached_block[0];
@@ -194,18 +190,15 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 			shift_queue(set_1_queue, free_spot);
 	}
 	else { // select a victim since there is no free spot 
-		printf("No free slot, need to evict!\n");
 		int victim_num;
 		/* Depending on the index bit, operate on set 0 or set 1 */
 		if (indexbit == 0) {
 			victim_num = set_0_queue[0];
-			printf("victim block is in set 0 , %d\n", victim_num);
 			victim_block = Cache[indexbit][victim_num];
 			victim_block_helper = Cache_helper[indexbit][victim_num];
 			dirtybit = (bool) DIRTY_BIT(victim_block_helper);
 			if (dirtybit) {
 				// write back
-				printf("need to write back\n");
 				mem_write_block(address, victim_block);
 			}
 			// load new data block
@@ -224,7 +217,6 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 			shift_queue(set_0_queue, victim_num);
 		} else {
 			victim_num = set_1_queue[0];
-			printf("victim block is in set 1, %d\n", victim_num);
 			victim_block = Cache[indexbit][victim_num];
 			victim_block = Cache[indexbit][victim_num];
 			victim_block_helper = Cache_helper[indexbit][victim_num];
@@ -232,7 +224,6 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 			if (dirtybit) {
 				// write back
 				mem_write_block(address, victim_block);
-				printf("need to write back\n");
 			}
 			// load new data block
 			if (!is_store_word) {
@@ -253,22 +244,11 @@ uint32_t load_data_into_cache(uint32_t address, bool is_store_word, uint32_t new
 	return read_data;
 }
 
-uint32_t insert_into_cache(uint32_t address) {
-	// go through the Cache in specific slot according to the address
-	// if there is no free space, make it and insert the data into cache
-	return 0;		
-}
-
 /* shift the queue when cache is accessed for LRU implementation */
 void shift_queue (int queue[], int recent_index) {
 	int tail = recent_index;
 	bool located = 0;
 	int i;
-	printf("before : shift_queue\n");
-	for (i=0;i<4;i++){
-		printf("%d ", queue[i]);
-	}
-	printf("\n");
 
 	for (i = 0; i < 3; i++) {
 		if (queue[i] == recent_index || located == 1) {
@@ -277,33 +257,14 @@ void shift_queue (int queue[], int recent_index) {
 		}
 	}
 	queue[3] = tail;
-
-	printf("after : shift_queue\n");
-	for (i=0;i<4;i++){
-		printf("%d ", queue[i]);
-	}
-	printf("\n");
 }
 
-/* update the cache block when eviction happens */
-/*
-void update_cache_block(uint32_t * updating_block, uint32_t tagbit, uint32_t data, bool is_store_word){
-	if (!is_store_word) {
-		updating_block[0] = tagbit | 0x80000000;
-	} else {
-		updating_block[0] = tagbit | 0xc0000000;
-	}
-	updating_block[1] = data;
-}
-*/
-
+/* Update the cache block helper */
 void update_cache_block_helper(uint32_t * updating_block, uint32_t tagbit, bool is_store_word) {
 	if (!is_store_word) {
 		updating_block[0] = tagbit | 0x80000000;
 	} else {
 		updating_block[0] = tagbit | 0xc0000000;
 	}
-	printf("updated cache block helper %x\n", updating_block[0]);
 }
-
 

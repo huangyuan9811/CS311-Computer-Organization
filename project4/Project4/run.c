@@ -1,4 +1,4 @@
-/***************************************************************/
+/****************************************************************/
 /*                                                             */
 /*   MIPS-32 Instruction Level Simulator                       */
 /*                                                             */
@@ -12,6 +12,7 @@
 
 #include "util.h"
 #include "run.h"
+#include "cache.h"
 
 int text_size;
 short get_instr_type(short op);
@@ -47,7 +48,13 @@ bool next_finished = 0;
 bool fix_PC = 0; // To set PC value when instructions are all finished
 bool hazard_detected = 0;
 
+/* For data cache */
 int cache_miss_stall = 0;
+/* Cache should be loaded with new data after 30 cycles of stalling, so values are saved at MEM stage when misses are detected and loaded into cache after 30 cycles.*/
+uint32_t save_mem_address;
+uint32_t save_load_data;
+bool save_is_store_word;
+uint32_t save_read_data;
 
 /***************************************************************/
 /*                                                             */
@@ -83,17 +90,20 @@ void process_instruction(){
 	
 	cycle_count ++;
 
+	/* Load cache with new data after 30 cycles */
+	if (cache_miss_stall == 1) {
+		save_read_data = load_data_into_cache(save_mem_address, save_is_store_word, save_load_data);
+		CURRENT_STATE.past_MEM_WB_pipeline.MEM_WB_MEM_OUT = save_read_data;
+	}
+
+	/* Do nothing for cache misses */
 	if (cache_miss_stall > 0) {
-		//flush_MEM_WB();
 		CURRENT_STATE.PIPE[WB_STAGE] = 0;
 		cache_miss_stall--;
 		return;
-	}
-	/** Your implementation here */
+	} 
 	
 	/* take care of all the flushing and branching */
-	// update current pc. to find out which instruction to fetch in this cycle.
-	// 3 different types : jump address, branch address, PC+4
 
 	/* initial PC */ 
 	if (cycle_count-1 == 0) {
@@ -131,7 +141,6 @@ void process_instruction(){
 	EX_Stage();
 	MEM_Stage();
 	
-
 	if (ID_EX_num_stall > 0) {
 		flush_ID_EX();
 	}
@@ -142,9 +151,7 @@ void process_instruction(){
 		CURRENT_STATE.PC = last_PC;
 		}
 		flush_IF_ID();
-		
 	} 
-
 
 	/* if data hazard occurs, don't update the registers */
 	if (ID_EX_num_stall == 0) {
@@ -163,19 +170,18 @@ void process_instruction(){
 		hazard_detected = 0;
 	}
 
-
 	/* If all pipeline is empty, exit(0) */
 	if (cycle_count >1) {
 		if (CURRENT_STATE.PIPE[IF_STAGE] ==0 && CURRENT_STATE.PIPE[ID_STAGE] ==0 && CURRENT_STATE.PIPE[EX_STAGE] ==0 && CURRENT_STATE.PIPE[MEM_STAGE] == 0 && CURRENT_STATE.PIPE[WB_STAGE] ==0 ) {
-		printf("Simulator halted after %d cycles\n\n", cycle_count-1);
+			printf("Simulator halted after %d cycles\n\n", cycle_count-1);
+			xdump(2, 4, 8, Cache);
 			exit(0);
 		}
 	}
 }
 
 void IF_Stage() {
-
-	// fetch instruction
+	/* fetch instruction */
 	instruction * instr = get_inst_info(Next_PC);
 	if (instr == NULL) return;
 
@@ -343,9 +349,6 @@ void EX_Stage() {
 			alu_out = ALU_IN_1 & ALU_IN_2;
 		} else if (control == 2) { // ADD
 			alu_out = ALU_IN_1 + ALU_IN_2;
-			printf("alu in 1 %d\n", ALU_IN_1);
-			printf("alu in 2 %d\n", ALU_IN_2);
-			printf("alu out %d\n", alu_out);
 		} else if (control == 1) { // OR
 			alu_out = ALU_IN_1 | ALU_IN_2;
 		} else if (control == 6) { // SUB
@@ -389,17 +392,12 @@ void EX_Stage() {
 void MEM_Stage() {
 	/* check for branch prediction failed or not */
 	if (branchPredictionFailed) {
-		// flush!
-		//	flush_EX_MEM(); // did i update this or not?
 		flush_ID_EX();
 		flush_IF_ID();
-		//CURRENT_STATE.PC = Next_PC; 
 		IF_ID_num_stall--;
-		//branchPredictionFailed = 0;
 		/* undo the default PC+4 */
 		Next_PC -=4;
 	}
-
 
 	CURRENT_STATE.PIPE[MEM_STAGE] = CURRENT_STATE.past_EX_MEM_pipeline.EX_MEM_NPC;
 
@@ -413,27 +411,20 @@ void MEM_Stage() {
 	cs->new_MEM_WB_pipeline.MEM_WB_RD = cs->past_EX_MEM_pipeline.EX_MEM_RD;
 	cs->new_MEM_WB_pipeline.MEM_WB_DEST = cs->past_EX_MEM_pipeline.EX_MEM_DEST;
 
-	// operate on data memory
+	/* operate on data memory */
 	if (cs->past_EX_MEM_pipeline.MEM_CONTROL.MEM_READ) {
-		// lw instruction
-		/* without data cache */
-		/*
-		cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = mem_read_32(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT);
-		*/
-		printf("data memory access : LW\n");
-		/* with data cache */
+		/* lw instruction */
 		uint32_t cached_data;
 		if ((cached_data = is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0)) != 0xffffffff) {
-			printf("cache read hit\n");
 			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = cached_data;
-			printf("get it to the register %x\n", cached_data);
 		} 
 		else {
-			printf("cache read miss\n");
 			// stall the pipeline
 			cache_miss_stall = 30;
-			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0);
-			//flush_MEM_WB();
+//			cs->new_MEM_WB_pipeline.MEM_WB_MEM_OUT = load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 0, 0);
+			save_is_store_word = 0;
+			save_mem_address = cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT;
+			save_load_data = 0;
 		}
 
 
@@ -441,34 +432,21 @@ void MEM_Stage() {
 		cs->new_MEM_WB_pipeline.MEM_WB_ALU_OUT = cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT; // for r-type instruction, this will be written back to destination register in WB stage
 	}
 	if (cs->past_EX_MEM_pipeline.MEM_CONTROL.MEM_WRITE){
-		printf("data memory access : SW\n");
-		// sw instruction
-		/* without data cache */
-		/*
-		mem_write_32(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, cs->past_EX_MEM_pipeline.EX_MEM_ALU_IN_2); // check page 280 and 313
-		*/
-
-		/* with data cache */
+		/* sw instruction */
 		uint32_t new_data = cs->past_EX_MEM_pipeline.EX_MEM_ALU_IN_2;
-		// if the data corresponding to the address is in the cache
-		// just update the cache block's data && set dirty bit
 		if (is_data_in_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data) != 0xffffffff) {
-		// nothing	
-			printf("cache write hit\n");
+			/* nothing */	
 		}
-
-		// else 
-		// load the data into the cache and update it with this data
+		/* load the data into the cache and update it with new data */
 		else {
-			printf("cache write miss\n");
 			// stall the pipeline
 			cache_miss_stall = 30;
-			load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data);
-			//flush_MEM_WB();
+			//load_data_into_cache(cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT, 1, new_data);
+			save_is_store_word = 1;
+			save_mem_address = cs->past_EX_MEM_pipeline.EX_MEM_ALU_OUT;
+			save_load_data = new_data;
 		}
-
 	}
-
 }
 
 void WB_Stage() {
@@ -530,7 +508,6 @@ void parse_control_signals(instruction * instr) {
 				break;
 			case 0x21 : // addu
 				cs->new_ID_EX_pipeline.EX_CONTROL.ALU_CONTROL = 2;
-				printf("addu?\n");
 				break;
 			case 0x27 : // nor
 				cs->new_ID_EX_pipeline.EX_CONTROL.ALU_CONTROL = 12;
