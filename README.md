@@ -1,4 +1,4 @@
-# CS311
+# KAIST CS311
 Computer Organization Fall2017
 
 ### Project 1 MIPS Assembler
@@ -71,3 +71,4 @@ struct MEM_WB_PIPELINE {
   * keeps track of valid bit, dirty bit and tag bit to check if the data in the cache is the correct data
 * Queues for LRU eviction algorithm 
 
+와 아키 끝...
