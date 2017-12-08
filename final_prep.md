@@ -11,11 +11,101 @@
 ## Pipeline hazards
 
 ## Cache
+Why do we need cache? To reduce the memory access.
+* Cache write
+    * Write hit 
+        * Write back vs write through 
+            * Whenever cache write happens, do we update the memory or not?
+            * Write back is normally better, and it makes a difference when it is a cache hit 
+    * Write miss
+        * Stalling the pipeline (PR4에서 구현)
+            * Find a free space in the cache (if none, evict a block), bring in the data, update the data and resume pipeline
+        * Not stalling 
+            * Write allocate vs no write allocate
+                * 그냥 바로 캐시에 데이터 적어버린다 (자리없음 eviction하라는건가) vs 캐시는 패스하고 메모리에 업데이트해준다.
+* Cache read
+    * Read hit
+    * Read miss 
+        * Stall the pipeline (PR4에서 구현)
+* Calculating offset bits, index bits and tag bits
+    * Offset bit == 2 bits : 1 word는 4 byte인 경우 기본적으로 2 bit는 offset이다
+    * Index bit (= number of cache lines)
+        * direct mapped일 경우 : cache_size / cache_block_size
+        * n-way associative : cache_size / (cache_block_size * n)
+        * fully associative : 0 bit
+    * Tag bit : 32 bit - Index bit - Offset bit
+    * Valid bit과 dirty bit이 필요할 경우가 많기 때문에 주로 (2 + (32-index-offset))bits가 tag+alpha bit로 cache block하나당 필요하다.
+        
 
-## VM
+### How to reduce miss rate
+1. Increase associativity
+    * Direct mapped vs set-associative vs fully associative
+        * Direct mapped인 경우에는 cache line 하나에 cache block하나만 들어갈 수 있어서 만약 index가 같은 여러개의 address의 데이터 접근이 많다면 eviction이 매우 자주 일어난다
+        * Set-associative는 more than 1 cache block can be placed in one cache line (ex. 4-way면 up to 4 cache blocks with the same index bit can be placed in the cache at the same time)
+        * Fully associative는 index bit없이 모든 cache block들이 한 줄에 다 들어간다
+     
+2. Multi-level cache
+    * L1 and L2 cache
+    * Helps to decrease the AMAT
+    
+### How to improve cache performance
+* Cache performance measured by AMAT
+    * AMAT = Hit time + miss rate * miss penalty
+1. Reduce the miss rate
+    * Larger cache
+    * Increase associativity
+2. Reduce hit time
+    * Smaller cache
+    * Direct mapped
+    * Smaller blocks
+3. Reduce miss penalty
+    * Smaller blocks
+    * Use multiple level cache
+    * Write buffer - don't have to wait for write to finish before reading
 
-## ILP
-Why is instruction level parallelism used?
+## Virtual Memory
+* Virtual memory는 각 프로세스가 디스크 크기만큼의 메모리를 가지고 있는 것처럼 보여준다. 
+* Main memory를 캐시처럼 사용 ->실제로 메모리를 접근할때에는 page address translation이 필요히다. (virtual to physical)
+
+If we look at the pipeline, we added cache for reducing the number of access to main memory.
+
+But if we want to access main memory, we need physical address, which means we need to perform address translation.
+
+However, in order to do address translation, we need to access the page table, which is in the main memory...
+
+This means that every time we try to access memory, we have to at least access main memory once for address translation..너무 노답이잖아.
+So we add TLB!
+
+### Translation Lookaside Buffer
+* A cache for page table.
+* Mostly very small(16~512 entries), since the hit latency is important. (작아야 access time이 줄어든다)
+* TLB misses do not mean page fault. It could be a TLB miss, but the page may still be in the main memory.
+    * 예를 들어 좀 오랫동안 access되지 않았던 페이지라면 아직 메인 메모리에서는 evict되지 않고 있지만 TLB에 translation 엔트리가 없을 수도 있다. 
+* Ideal case : TLB hit (no need to access the page table) && Page in main memory (no page fault, no need to access the disk) && Data in cache (no need to access the main memory)
+    * Ideal case에서는 매인 메모리조차 접근안하고 해결됌!
+
+#### Then, can we improve the cache access time?
+* 애초에 cache를 physical address로 접근하지 않고 virtual address space를 사용해서 만들 수 있지 않을까? (to reduce the address translation time)
+    * coherency problem occur
+        * cache can be shared by multiple processes, so it is not possible to distinguish from which process the cached data is for (may need to put pid tags)
+* Make the TLB access and cache access parallel (VA->PA address translation을 끝내기 전에 cache access를 시작한다)
+    * How is this possible when cache is accessed with physical address?
+    * Note that between physical and virtual address, lower 12 bits (page offset if page is 4KB) is the same. 
+    * Luckily, index bit for cache is the lower bits of the physical address.
+    * Since lowest 2 bits are word offset, we can use up to 10 bits (12 - 2) for the index bit 
+
+### Pros and cons of increasing page size (ex. 4KB to 64KB)
+* Pros
+    * Page table size will decrease (1 entry used to cover 4KB but now will cover 64KB)
+    * can exploit spatial locality (more data brought at once)
+* Cons
+    * Higher miss penalty (more data has to be transferred)
+    * Higher internal fragmentation (many data may not be used)
+    * Higher competition for cache space (less number of pages will be in the cache)
+* 결론 무식하게 페이지 사이즈 막 늘리고 그러지말자
+
+## Instruction Level Parallelism
+Why is ILP used?
 * increase the number of instructions that can be executed at a given time
 * 그냥 뭐든지 더 빨리 더 많이 하면 좋으니까...
 
@@ -68,17 +158,56 @@ PC register랑 data register를 duplicate 시켜서 context switching 비슷한 
 * Coarse-grained
 * Simultaneous
 
-### Shared memory multiprocessors
-Shared memory means all the cores are sharing memory and I/O through some communication network.
 
-### SMP
+### SMP (Shared memory multi-processor)
 Multiple cores on a chip but they share memory. 
 Although each processor has its own virtual address space, they have the same physical adddress space.
 They can access the same memory location through load and store instructions.
 * uniform memory access (UMA)
 * nonuniform memory access (NUMA)
 
-Must consider synchronization problems.
+Must consider cache coherence and synchronization problems.
+
+#### Cache coherence
+Coherent하다는건 어떤 프로세서가 data write을 진행하더라도 이 address의 데이터를 원하는 다른 모든 프로세서는 앞으로 업데이트된 데이터를 받을 수 있어야 한다.
+Serial하게 1차원적으로 read and write sequence가 만들어져야 한다고 생각하면 될듯.
+그럼 write한 것을 다른 캐시 플러스 메인 메모리에게 propagate해야겠지
+Must perform write propagation and serialization
+
+* write back vs write through
+write through는 주로 inefficient하다. Write할때마다 데이터가 전달되어야해서 high bandwidth를 요구하기 때문. 하지만 생각하기에도 구현하기에도 쉽지..
+write back은 cache hit일때는 cache access만으로 끝나기 때문에 efficient한 반면 구현하려면 조금 더 복잡하다.
+write through -> update based protocol
+write back -> invalidation based protocol
+
+##### Invalidation based protocol (write-back)
+프로세서 하나가 write을 하게 되면 이 프로세서의 캐시에 들어있는 데이터는 exclusive state고 이 같은 address의 데이터를 가지고 있는 다른 모든 캐시들에게 메세지를 보내서
+그 데이터들은 invalidation state가 된다. 
+이제 cache controller는 프로세서 + snooping signal을 양방향에서 받으면서 캐시를 관리해야한다.
+* MSI protocol (Modified, shared, invalidated)
+Depending on the processor-initiated and bus-initiated transactions, the states of caches change between 3 stages.
+그림 그려보면 이해됌ㅋㅋ
+* MESI protocol (메시!)
+Added exclusive state to MSI -> valid && clean
+BusRd를 통해서 snooping을 하면 다른 캐시들이 copy를 가지고 있는지 아니면 안가지고 있는지 확인하고 아무도 안가지고 있으면 exclusive state로 가면 된다
+Exclusive에서 PRWr로 인해 modified로 변환할때는 bus transaction이 필요없다. 혼자만 가지고 있으니까!
+
+#### Locks
 Lock 같은걸 사용해서 동시에 두개의 프로세서가 같은 데이터를 write 하고 read하지 못하게 해야한다
+* spin locks
 
 ### Message passing multiprocessors
+
+
+## Concepts
+* Multi-core/Multi-processor
+* Multi-threading
+* SIMD/MIMD/SISD
+* VLIW
+* Vector
+* Superscalar
+* Shared memory
+* Instruction level parallelism
+* Job level parallelism
+* Multiple issue
+
