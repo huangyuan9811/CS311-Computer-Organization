@@ -9,6 +9,64 @@
 * SIMD and multi-threading
 
 ## Pipeline hazards
+* Structural hazard 
+    * In our simple case, it is solved by having separate instruction and data cache
+* Data hazard
+데이터가 아직 준비가 안되어있는데 다음 instruction에서 register를 일찍 읽어버리면 잘못된 값을 읽으니까 hazard!
+    * Read before write hazard
+```angular2html
+add $3, $2, $1
+sub $4, $3, $5
+```
+   * Load-use hazard
+```angular2html
+lw  $1, 0($2)
+add $3, $1, $4
+```
+   * Mem-to-mem hazard
+```angular2html
+lw $1, 0($2)
+sw $1, 4($2)
+```
+* Control hazard
+    * Branch prediction
+        * Static branch prediction vs dynamic branch prediction
+        * Dynamic branch prediction requires things like branch history table 
+            * Can use 1 bit or 2-bit predictor (2-bit은 틀려도 한번 봐준다는 개념)
+        * Also using branch delay slot helps
+    * Jumps
+        * Jump requires 1 stall always
+    * Exceptions
+        * Need to re-execute the instruction that caused this exception, so we need to save this problematic PC
+
+* In essence, all these hazards can be solved through stalling...But there must be a better way of course.
+
+### Data Forwarding
+이미 계산은 다 되어있고 준비는 되었는데 WB stage에 아직 도달안해서 register에 적히지 않은 값들을 필요로 하는 instruction들에게 미리 보내주는 것. 아이 똑똒해
+* 특히나 ALU의 source register들의 input값들이 주로 data hazard가 많이 걸린다. 그래서 여기에 MUX를 추가해서 어떤 값을 쓸지 정하면 된다. Forwarded data vs from some registers
+* Check if the forwarding criterion is met in the EX stage 
+* Without data forwarding, 2 stalls are needed in between 2 consecutive and dependent instructions
+* 1 stall is still needed for load-use hazard despite the data forwarding
+
+### Branch prediction
+* Static branch prediction
+    * Branch taken
+        * good if the branch checking is at the end of the loop
+    * Branch not taken (PR3 구현)
+        * at the beginning of the loop
+* Dynamic branch prediction
+    * keep track of the history and predict the future
+    * 1 bit predictor is ok but probably not that useful when we have lots of resources on our hands to implement more sophisticated predictor
+    * 2 bit predictor is like a state machine
+* Placing the branch decision unit in the ID stage will reduce the number of stall cycles
+    * 굳이 MEM stage에서 하지말고 일찍 해버리자
+    * ID stage에서 EX에서 ALU를 가져와버려서 branch target address를 계산해버리고
+    * 그럼 branch 해야하는지 안해야하는지는? 이거는 register 2개를 읽는거라 data hazard가 있을 수 있어서 additional stalling이 필요할 수 도 있다.
+* Delayed branch 
+    * Implemented in MIPS architecture
+    * 위에서 ID stage에서 branch decision을 해결한다고 해도 1 stall이 필요한데 그때 낭비하지말고 branch와 관련없는 instruction을 가져와서 그냥 실행시켜버리는 건 어떤가 == delay slot
+    * 컴파일러가 현명하게 알맞는 무관한 instruction을 가져다와서 해주는 듯
+    * not programmers job in MIPS at least
 
 ## Cache
 Why do we need cache? To reduce the memory access.
@@ -46,11 +104,15 @@ Why do we need cache? To reduce the memory access.
      
 2. Multi-level cache
     * L1 and L2 cache
+    * L1 cache focuses on reducing the hit time and L2 cache focuses on reducing the miss rate 
+    * So, L1 cache tends to be small while L2 cache tend to have high associativity
     * Helps to decrease the AMAT
     
 ### How to improve cache performance
 * Cache performance measured by AMAT
     * AMAT = Hit time + miss rate * miss penalty
+* And also counting the CPI_stall 
+    * CPI_stall = CPI_ideal + miss rate * miss penalty
 1. Reduce the miss rate
     * Larger cache
     * Increase associativity
@@ -211,3 +273,4 @@ Lock 같은걸 사용해서 동시에 두개의 프로세서가 같은 데이터
 * Job level parallelism
 * Multiple issue
 
+볼때마다 새롭구나..
