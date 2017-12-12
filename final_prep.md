@@ -173,29 +173,72 @@ Why is ILP used?
 
 ### Some ways to achieve ILP
 * Super pipelining 
-Increase the number of pipeline stages -> reduce the clock cycle time
+    * Increase the number of pipeline stages -> reduce the clock cycle time
 * Multiple issue 
-Fetch more than 1 instruction at a given cycle. 
-Need to duplicate hardware
+    * Fetch more than 1 instruction at the same time.
+    * Need to duplicate hardware. (ex. multiple read/write ports)
 
-### Multiple Issue
+### 2 types of Multiple Issue processor
 * Static multiple issue == VLIW
+    * Let the compiler do the job
 * Dynamic multiple issue == Super scalar
+    * Let CPU do the job
 
 ### Things to watch out and consider for multiple issue datapath
+* How many instruction should we fetch at the same time?
+* Which instructions should we fetch together?
+* Need to think about dependency and hazards carefully
 
-### VLIW
+### VLIW (Very Long Instruction Word, literally)
+진짜로 1 instruction을 가져오는게 아니라 여러개를 붙여서 가져온다. (Normally an ALU operating instruction and Mem access instruction)
+* Compiler at compile time will look at the dependencies of the instructions and create an issue packet
+    * Make sure we don't have 2 mem access instructions at the same time to avoid structural hazard
+* Need to duplicate hardware 
+* If number of independent instructions is too small, then there is very little performance improvement 
+* To solve above problem, loop unrolling is commonly used
+
 * pros
+    * Hardware can be kept simple (less power consumption)
+    * scalable
 * cons
-    
+    * Compile time is long and compiling and complex
+    * Object code is incompatible 
+    * Code bloat (loop unrolling will be very bloated)
+    * Large memory bandwidth
+    * When hazard occurs, we need to stall all future instructions
+
+그래서 결론은 다이나믹으로...
+
 ### Super scalar processor
+* Dynamically at run time, decide how many and which instructions to execute at the same time
 * 3 different units 
-    * Fetch unit
+    * Instruction fetch unit
     * Execution unit
     * Commit unit
-* pros
-* cons
-
+* Instruction fetching and committing MUST be done in-order
+    * In the commit unit, there is a queue where instructions that are ready to be committed are in line waiting for the confirmation
+    * Speculative instructions will not be committed until it is confirmed that the speculation is correct
+* Execution can be done out-of-order and this will increase IPC
+    * When performing out-of-order execution, dependencies have to be checked
+    * Read after write : true dependency 우리가 항상 자주 마주치던...
+    * Write after write : ouput dependency
+   
+    이건 같은 레지스터를 변경하는건데 이때 순서가 바뀌면 나중에 $1을 쓰는 애들이 이상한 값을 받으니까 그러면 안된다
+```angular2html
+lw  $1, 0($2)
+add $1, $3, $4
+...
+sub $5, $1, $3
+```
+   * Write after read : anti-dependency
+   
+   먼저 $2의 값을 읽는 instruction이 있는데 그 후에 $2의 값을 변경하는 instruction이 있다. 여기서 순서가 바뀌어버리면 add할때 $2의 값이 다른 값이 되어버리니까 이것도 안된다.
+```angular2html
+add $3, $2, $1
+sub $2, $4, $5
+```
+   * WAW랑 WAR은 storage conflict and can be solved with register renaming
+   
 ## Parallel processors
 이제까지는 single core이었지만 이제는 멀티코어로 넘어왔다.
 
